@@ -41,9 +41,9 @@ def detect(save_img=False):
                 tmp_weight_path = Path(tmp_dir) / weight.replace("/", ".")
                 s3.download_file(bucket, weight, str(tmp_weight_path))
                 tmp_weight_paths.append(tmp_weight_path)
-        weights = tmp_weight_paths
-    # Load model
-    model = attempt_load(weights, map_location=device)  # load FP32 model
+            weights = tmp_weight_paths
+            # Load model
+            model = attempt_load(weights, map_location=device)  # load FP32 model
     stride = int(model.stride.max())  # model stride
     imgsz = check_img_size(imgsz, s=stride)  # check img_size
 
