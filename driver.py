@@ -234,7 +234,7 @@ def main(opt):
         threading.Thread(target=save_img_worker, daemon=True).start()
         for item in split_manifest[split_name]:
             key = item["s3Key"]
-            labels = item["data"]
+            labels = item["labels"]
             images_to_download.put(key)
             labels_for_image[key] = labels
         images_to_download.join()
@@ -244,7 +244,7 @@ def main(opt):
             # assume [{ cx, cy, w, h, class, img_width, img_height }, ...]
             out = ""
             for label in labels:
-                c = label_to_idx[label["class"]]
+                c = label["class"]
                 img_width = label.get("img_width")
                 img_height = label.get("img_height")
                 # Compute YOLO format BBox from our internal annotation format
