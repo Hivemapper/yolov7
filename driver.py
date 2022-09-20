@@ -217,7 +217,10 @@ def main(opt):
         def save_img(key):
             this_image_path = images_path / key
             this_image_path.parent.mkdir(parents=True, exist_ok=True)
-            s3.download_file(image_bucket, key, str(this_image_path))
+            try:
+                s3.download_file(image_bucket, key, str(this_image_path))
+            except Exception as exc:
+                print(f"Error downloading bucket: {image_bucket} object: {key}\n{exc}")
             return
 
         def save_img_worker():
