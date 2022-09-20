@@ -16,7 +16,10 @@ s3 = boto3.client("s3")
 def load_jsonl(raw_str):
     content = []
     for line in raw_str.split("\n"):
-        content.append(json.loads(line))
+        try:
+            content.append(json.loads(line))
+        except json.JSONDecodeError:
+            print(f"invalid JSON line: '{line}'")
     return content
 
 
