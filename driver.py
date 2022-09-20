@@ -271,6 +271,8 @@ def main(opt):
         "names": idx_to_label,
     }
 
+    print(training_in)
+
     yaml_out = yaml.dump(training_in)
     with open(yaml_path, "w") as f:
         f.write(yaml_out)
