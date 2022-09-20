@@ -197,6 +197,8 @@ def main(opt):
     split_sizes["test"] = holdout_size // 2
     split_sizes["train"] = len(manifest) - split_sizes["val"] - split_sizes["test"]
     split_manifest = {split_name: [] for split_name in splits}
+    for key, value in split_sizes.items():
+        print(f"{key} set size: {value}")
 
     for split_name in splits:
         while len(split_manifest[split_name]) < split_sizes[split_name]:
