@@ -230,7 +230,7 @@ def main(opt):
         threading.Thread(target=save_img_worker, daemon=True).start()
         for item in split_manifest[split_name]:
             key = item["s3Key"]
-            labels = item["data"]
+            labels = item["labels"]
             images_to_download.put(key)
             labels_for_image[key] = labels
         images_to_download.join()
