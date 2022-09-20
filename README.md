@@ -60,16 +60,16 @@ python train_aux.py --workers 8 --device 0 --batch-size 16 --data data/custom.ya
 
 See [reparameterization.ipynb](tools/reparameterization.ipynb)
 
-## Inference (TODO)
+## Inference 
 
-On video:
+On video (no longer unsupported):
 ``` shell
 python detect.py --weights yolov7.pt --conf 0.25 --img-size 640 --source yourvideo.mp4
 ```
 
 On image:
 ``` shell
-python detect.py --weights yolov7.pt --conf 0.25 --img-size 640 --source inference/images/horses.jpg
+python detect.py --bucket network-machine-learning-artifacts --weights yolo-test-exp/632020cce69929002c2a0a73/weights/best.pt --device cpu --conf 0.25 --source ./path/to/images/ --save-txt --name output-project-name
 ```
 
 <div align="center">
