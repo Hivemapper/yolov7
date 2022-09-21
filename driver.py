@@ -1,11 +1,13 @@
 import argparse
 import json
 import math
+import shutil
 import yaml
 import pathlib
 import io
 import threading
 import queue
+import urllib
 
 import boto3
 
@@ -171,7 +173,7 @@ def main(opt):
         s3.download_fileobj(bucket, key, buff)
         buff.seek(0,0)
         manifest_content = buff.read().decode("utf-8")
-    manifest = load_jsonl(manifest_content)
+    manifest = load_jsonl(open("/Users/bda/Desktop/cocoTestSet.jsonl", "r").read())
 
 
     class_labels = set() 
@@ -210,27 +212,53 @@ def main(opt):
         images_to_download = queue.Queue()
         labels_for_image = {}
         
-        def save_img(key):
+        def save_img(manifest_item):
             this_image_path = images_path / key
             this_image_path.parent.mkdir(parents=True, exist_ok=True)
-            print(f"saving image {image_bucket} {key} to {this_image_path}")
-            s3.download_file(image_bucket, key, str(this_image_path))
+            if "s3Key" in item.keys():
+                key = manifest_item["s3Key"]
+                this_image_path = images_path / key
+                this_image_path = images_path / key
+                print(f"saving image {image_bucket} {key} to {this_image_path}")
+                s3.download_file(image_bucket, key, str(this_image_path))
+            if "webUrl" in item.keys():
+                key = manifest_item["webUrl"]
+                this_image_path = images_path / key
+                this_image_path = images_path / key
+                print(f"saving image {key} to {this_image_path}")
+                urllib.request.urlretrieve(key, this_image_path)
             return
 
         def save_img_worker():
             while True:
-                unsaved_img = images_to_download.get()
-                save_img(unsaved_img)
+                unsaved_manifest_item = images_to_download.get()
+                save_img(unsaved_manifest_item)
                 images_to_download.task_done()
 
         # download all the files
         threading.Thread(target=save_img_worker, daemon=True).start()
         for item in split_manifest[split_name]:
-            key = item["s3Key"]
+            if "s3Key" in item.keys():
+                key = item["s3Key"]
+            if "webUrl" in item.keys():
+                key = item["webUrl"].split("/")[-1]
             labels = item["labels"]
-            images_to_download.put(key)
+            images_to_download.put(item)
             labels_for_image[key] = labels
         images_to_download.join()
+
+        # def copy_coco_img_to_project(coco_url):
+        #     coco_id = coco_url.split("/")[-1]
+        #     coco_img_path = pathlib.Path("/Users/bda/Desktop/val2017") / coco_id
+        #     this_image_path = images_path / coco_id
+        #     shutil.copy(coco_img_path, this_image_path)
+
+
+        # for item in split_manifest[split_name]:
+        #     coco_id = item["webUrl"].split("/")[-1]
+        #     copy_coco_img_to_project(item["webUrl"])
+        #     labels_for_image[coco_id] = item["labels"]
+
 
         # write the annotations
         for image, labels in labels_for_image.items():
