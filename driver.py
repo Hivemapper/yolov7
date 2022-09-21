@@ -16,7 +16,10 @@ s3 = boto3.client("s3")
 def load_jsonl(raw_str):
     content = []
     for line in raw_str.split("\n"):
-        content.append(json.loads(line))
+        try:
+            content.append(json.loads(line))
+        except json.JSONDecodeError:
+            print(f"invalid JSON line: '{line}'")
     return content
 
 
@@ -170,23 +173,14 @@ def main(opt):
         manifest_content = buff.read().decode("utf-8")
     manifest = load_jsonl(manifest_content)
 
-    labels_for_image = {}
 
-    idx_to_label = {}
-    label_to_idx = {}
-    next_idx = 0
-
+    class_labels = set() 
     for line in manifest:
         labels = line.get("labels")
         for label in labels:
-            labels_for_image[key] = labels
-            c = label.get("class")
-            if c not in label_to_idx:
-                idx_to_label[next_idx] = c
-                label_to_idx[c] = next_idx
-                next_idx += 1
-
-    num_classes = len(idx_to_label)
+            class_labels.add(label["className"])
+    class_labels = list(class_labels)
+    num_classes = len(class_labels)
 
     exp_name_path = pathlib.Path(name)
 
@@ -219,10 +213,8 @@ def main(opt):
         def save_img(key):
             this_image_path = images_path / key
             this_image_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                s3.download_file(image_bucket, key, str(this_image_path))
-            except Exception as exc:
-                print(f"Error downloading bucket: {image_bucket} object: {key}\n{exc}")
+            print(f"saving image {image_bucket} {key} to {this_image_path}")
+            s3.download_file(image_bucket, key, str(this_image_path))
             return
 
         def save_img_worker():
@@ -245,7 +237,7 @@ def main(opt):
             # assume [{ cx, cy, w, h, class, img_width, img_height }, ...]
             out = ""
             for label in labels:
-                c = label_to_idx[label["class"]]
+                c = class_labels.index(label["className"])
                 img_width = label.get("img_width")
                 img_height = label.get("img_height")
                 # Compute YOLO format BBox from our internal annotation format
@@ -268,7 +260,7 @@ def main(opt):
         "val": str(exp_name_path / "val"),
         "test": str(exp_name_path / "test"),
         "nc": num_classes,
-        "names": idx_to_label,
+        "names": class_labels,
     }
 
     print(training_in)
