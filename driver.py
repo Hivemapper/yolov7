@@ -173,7 +173,7 @@ def main(opt):
         s3.download_fileobj(bucket, key, buff)
         buff.seek(0,0)
         manifest_content = buff.read().decode("utf-8")
-    manifest = load_jsonl(open("/Users/bda/Desktop/cocoTestSet.jsonl", "r").read())
+    manifest = load_jsonl(manifest_content)
 
 
     class_labels = set() 
