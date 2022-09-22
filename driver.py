@@ -1,13 +1,11 @@
 import argparse
 import json
 import math
-import shutil
 import yaml
 import pathlib
 import io
 import threading
 import queue
-import urllib
 
 import boto3
 
@@ -18,10 +16,7 @@ s3 = boto3.client("s3")
 def load_jsonl(raw_str):
     content = []
     for line in raw_str.split("\n"):
-        try:
-            content.append(json.loads(line))
-        except json.JSONDecodeError:
-            print(f"invalid JSON line: '{line}'")
+        content.append(json.loads(line))
     return content
 
 
@@ -182,7 +177,6 @@ def main(opt):
         for label in labels:
             class_labels.add(label["className"])
     class_labels = list(class_labels)
-    num_classes = len(class_labels)
 
     exp_name_path = pathlib.Path(name)
 
@@ -212,60 +206,37 @@ def main(opt):
         images_to_download = queue.Queue()
         labels_for_image = {}
         
-        def save_img(manifest_item):
+        def save_img(key):
             this_image_path = images_path / key
             this_image_path.parent.mkdir(parents=True, exist_ok=True)
-            if "s3Key" in item.keys():
-                key = manifest_item["s3Key"]
-                this_image_path = images_path / key
-                this_image_path = images_path / key
-                print(f"saving image {image_bucket} {key} to {this_image_path}")
+            try:
                 s3.download_file(image_bucket, key, str(this_image_path))
-            if "webUrl" in item.keys():
-                key = manifest_item["webUrl"]
-                this_image_path = images_path / key
-                this_image_path = images_path / key
-                print(f"saving image {key} to {this_image_path}")
-                urllib.request.urlretrieve(key, this_image_path)
+            except Exception as exc:
+                print(f"downloading {key} from s3://{image_bucket} failed")
+                print(exc)
             return
 
         def save_img_worker():
             while True:
-                unsaved_manifest_item = images_to_download.get()
-                save_img(unsaved_manifest_item)
+                unsaved_img = images_to_download.get()
+                save_img(unsaved_img)
                 images_to_download.task_done()
 
         # download all the files
         threading.Thread(target=save_img_worker, daemon=True).start()
         for item in split_manifest[split_name]:
-            if "s3Key" in item.keys():
-                key = item["s3Key"]
-            if "webUrl" in item.keys():
-                key = item["webUrl"].split("/")[-1]
-            labels = item["labels"]
-            images_to_download.put(item)
+            key = item["s3Key"]
+            labels = item["data"]
+            images_to_download.put(key)
             labels_for_image[key] = labels
         images_to_download.join()
-
-        # def copy_coco_img_to_project(coco_url):
-        #     coco_id = coco_url.split("/")[-1]
-        #     coco_img_path = pathlib.Path("/Users/bda/Desktop/val2017") / coco_id
-        #     this_image_path = images_path / coco_id
-        #     shutil.copy(coco_img_path, this_image_path)
-
-
-        # for item in split_manifest[split_name]:
-        #     coco_id = item["webUrl"].split("/")[-1]
-        #     copy_coco_img_to_project(item["webUrl"])
-        #     labels_for_image[coco_id] = item["labels"]
-
 
         # write the annotations
         for image, labels in labels_for_image.items():
             # assume [{ cx, cy, w, h, class, img_width, img_height }, ...]
             out = ""
             for label in labels:
-                c = class_labels.index(label["className"])
+                c = class_labels.index(label["class"])
                 img_width = label.get("img_width")
                 img_height = label.get("img_height")
                 # Compute YOLO format BBox from our internal annotation format
@@ -287,7 +258,7 @@ def main(opt):
         "train": str(exp_name_path / "train"),
         "val": str(exp_name_path / "val"),
         "test": str(exp_name_path / "test"),
-        "nc": num_classes,
+        "nc": len(class_labels),
         "names": class_labels,
     }
 
