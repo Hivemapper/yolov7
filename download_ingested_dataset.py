@@ -1,3 +1,4 @@
+import argparse
 import copy
 import io
 import json
@@ -14,32 +15,39 @@ import yaml
 
 s3 = boto3.client("s3")
 
-DATASET_MANIFEST_BUCKET = "network-machine-learning-data"
-IMAGE_BUCKET = "network-sandbox-processed-data"
-DATASET_MANIFEST_KEY = sys.argv[1]
-TRAIN_VAL_SIZE = (
-    0.2  # % of dataset to leave for validation (fitting) and testing (metrics)
-)
-DATASET_RELATIVE_PATH = pathlib.Path("./street-signs-from-ingest")
+INGESTED_DATASET_PATH = pathlib.Path("./ingested-dataset")
 
 
-def main():
-    manifest_content = get_manifest_content(DATASET_MANIFEST_KEY)
+def parse_opt():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--manifest-bucket", help="input manifest/ label bucket name", default="network-machine-learning-data")
+    parser.add_argument("--manifest-key", help="S3 key for input manifest")
+    parser.add_argument("--image-bucket", help="input image bucket (if not same as --bucket)", default="network-sandbox-processed-data")
+    parser.add_argument(
+        "--holdout-size", 
+        type=float, 
+        default=0.15, 
+        help="proportion of the input dataset to withold from training, for testing and validation (0.0 < n < 0.5)",
+    )
+    return parser.parse_args()
+
+def main(opt):
+    manifest_content = get_manifest_content(opt.manifest_bucket, opt.manifest_key)
     manifest_items = load_jsonl(manifest_content)
 
     train_set, val_set, test_set = split_dataset(manifest_items)
-    train_path, val_path, test_path = prep_dataset_directory(DATASET_RELATIVE_PATH)
+    train_path, val_path, test_path = prep_dataset_directory(INGESTED_DATASET_PATH)
 
     unpack_labels(train_set, train_path)
-    download_images(train_set, train_path)
+    download_images(train_set, train_path, image_bucket_name=opt.image_bucket)
 
     unpack_labels(test_set, test_path)
-    download_images(test_set, test_path)
+    download_images(test_set, test_path, image_bucket_name=opt.image_bucket)
 
     unpack_labels(val_set, val_path)
-    download_images(val_set, val_path)
+    download_images(val_set, val_path, image_bucket_name=opt.image_bucket)
 
-    write_dataset_yaml(manifest_items, pathlib.Path("data") / "dataset.yaml")
+    write_dataset_yaml(manifest_items, dataset_path=INGESTED_DATASET_PATH, write_path=pathlib.Path("data") / "dataset.yaml")
 
 
 def load_jsonl(content: str):
@@ -52,9 +60,9 @@ def load_jsonl(content: str):
     return manifest_items
 
 
-def get_manifest_content(manifest_key: str):
+def get_manifest_content(manifest_bucket: str, manifest_key: str):
     with io.BytesIO() as buff:
-        s3.download_fileobj(DATASET_MANIFEST_BUCKET, DATASET_MANIFEST_KEY, buff)
+        s3.download_fileobj(manifest_bucket, manifest_key, buff)
         buff.seek(0, 0)
         manifest_content = buff.read().decode("utf-8")
     return manifest_content
@@ -83,8 +91,8 @@ def prep_dataset_directory(dataset_root: pathlib.Path):
     return train_dir, val_dir, test_dir
 
 
-def split_dataset(manifest_items: List[Any]):
-    split_size = math.floor(len(manifest_items) * TRAIN_VAL_SIZE)
+def split_dataset(manifest_items: List[Any], test_val_proportion: float):
+    split_size = math.floor(len(manifest_items) * test_val_proportion)
     train_set = copy.copy(manifest_items)
     random.shuffle(train_set)
     test_set = []
@@ -138,13 +146,13 @@ def format_label_file(
         return
 
 
-def download_images(manifest_items: List[Dict], data_subset_path: pathlib.Path):
+def download_images(manifest_items: List[Dict], data_subset_path: pathlib.Path, image_bucket_name: str):
     images_dir = data_subset_path / "images"
     items_to_download = queue.Queue()
 
     def save_img(item):
         this_image_path = images_dir / s3_key_to_local_path(item["s3Key"])
-        s3.download_file(IMAGE_BUCKET, item["s3Key"], str(this_image_path))
+        s3.download_file(image_bucket_name, item["s3Key"], str(this_image_path))
         return
 
     def save_img_worker():
@@ -161,7 +169,7 @@ def download_images(manifest_items: List[Dict], data_subset_path: pathlib.Path):
     items_to_download.join()
 
 
-def write_dataset_yaml(manifest_items: List[Dict], write_path: pathlib.Path):
+def write_dataset_yaml(manifest_items: List[Dict], dataset_path: pathlib.Path, write_path: pathlib.Path):
     output_yaml_data = {}
     class_labels_by_index = {}
     for item in manifest_items:
@@ -173,9 +181,9 @@ def write_dataset_yaml(manifest_items: List[Dict], write_path: pathlib.Path):
         class_labels[index - 1] = name
     output_yaml_data["names"] = class_labels
     output_yaml_data["nc"] = len(class_labels)
-    output_yaml_data["train"] = str(DATASET_RELATIVE_PATH / "train")
-    output_yaml_data["test"] = str(DATASET_RELATIVE_PATH / "test")
-    output_yaml_data["val"] = str(DATASET_RELATIVE_PATH / "val")
+    output_yaml_data["train"] = str(dataset_path / "train")
+    output_yaml_data["test"] = str(dataset_path / "test")
+    output_yaml_data["val"] = str(dataset_path / "val")
     yaml_content = yaml.dump(output_yaml_data)
     with write_path.with_suffix(".yaml").open("w") as fp:
         fp.write(yaml.dump(output_yaml_data))
@@ -183,7 +191,5 @@ def write_dataset_yaml(manifest_items: List[Dict], write_path: pathlib.Path):
 
 
 if __name__ == "__main__":
-    import ipdb
-
-    with ipdb.launch_ipdb_on_exception():
-        main()
+    opt = parse_opt()
+    main(opt)
