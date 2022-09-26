@@ -6,19 +6,13 @@ import pathlib
 import io
 import threading
 import queue
+import subprocess
 
 import boto3
 
 from train import train, select_device
 
 s3 = boto3.client("s3")
-
-def load_jsonl(raw_str):
-    content = []
-    for line in raw_str.split("\n"):
-        content.append(json.loads(line))
-    return content
-
 
 def parse_opt():
     parser = argparse.ArgumentParser()
@@ -164,109 +158,19 @@ def main(opt):
     key = opt.key
     name = opt.name
 
-    with io.BytesIO() as buff:
-        s3.download_fileobj(bucket, key, buff)
-        buff.seek(0,0)
-        manifest_content = buff.read().decode("utf-8")
-    manifest = load_jsonl(manifest_content)
-
-
-    class_labels = set() 
-    for line in manifest:
-        labels = line.get("labels")
-        for label in labels:
-            class_labels.add(label["className"])
-    class_labels = list(class_labels)
-
-    exp_name_path = pathlib.Path(name)
-
-    splits = ("train", "val", "test",)
-    split_sizes = {name: 0 for name in splits}
-    holdout_size = math.floor(opt.holdout_size * len(manifest))
-    split_sizes["val"] = holdout_size // 2
-    split_sizes["test"] = holdout_size // 2
-    split_sizes["train"] = len(manifest) - split_sizes["val"] - split_sizes["test"]
-    split_manifest = {split_name: [] for split_name in splits}
-    for key, value in split_sizes.items():
-        print(f"{key} set size: {value}")
-
-    for split_name in splits:
-        while len(split_manifest[split_name]) < split_sizes[split_name]:
-            split_manifest[split_name].append(manifest.pop())
-        split_path = exp_name_path / split_name
-
-        images_path = split_path / "images"
-        images_path.mkdir(parents=True)
-
-        labels_path = split_path / "labels"
-        labels_path.mkdir(parents=True)
-
-        yaml_path = pathlib.Path("data") / f"{name}.yaml"
-
-        images_to_download = queue.Queue()
-        labels_for_image = {}
-        
-        def save_img(key):
-            this_image_path = images_path / key
-            this_image_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                s3.download_file(image_bucket, key, str(this_image_path))
-            except Exception as exc:
-                print(f"downloading {key} from s3://{image_bucket} failed")
-                print(exc)
-            return
-
-        def save_img_worker():
-            while True:
-                unsaved_img = images_to_download.get()
-                save_img(unsaved_img)
-                images_to_download.task_done()
-
-        # download all the files
-        threading.Thread(target=save_img_worker, daemon=True).start()
-        for item in split_manifest[split_name]:
-            key = item["s3Key"]
-            labels = item["data"]
-            images_to_download.put(key)
-            labels_for_image[key] = labels
-        images_to_download.join()
-
-        # write the annotations
-        for image, labels in labels_for_image.items():
-            # assume [{ cx, cy, w, h, class, img_width, img_height }, ...]
-            out = ""
-            for label in labels:
-                c = class_labels.index(label["class"])
-                img_width = label.get("img_width")
-                img_height = label.get("img_height")
-                # Compute YOLO format BBox from our internal annotation format
-                x_center_norm = float(label["bbox_cx"]) / float(img_width)
-                y_center_norm = float(label["bbox_cy"]) / float(img_height)
-                bbox_width_norm = float(label["bbox_width"]) / float(img_width)
-                bbhox_height_norm = float(label["bbox_height"]) / float(img_height)
-                # And write them out to a file
-                out += "{} {} {} {} {}\n".format(
-                    c, x_center_norm, y_center_norm, bbox_width_norm, bbhox_height_norm
-                )
-            label_path = labels_path / pathlib.Path(image).with_suffix(".txt")
-            label_path.parent.mkdir(parents=True, exist_ok=True)
-            label_path.touch()
-            with open(label_path, "w") as f:
-                f.write(out)
-
-    training_in = {
-        "train": str(exp_name_path / "train"),
-        "val": str(exp_name_path / "val"),
-        "test": str(exp_name_path / "test"),
-        "nc": len(class_labels),
-        "names": class_labels,
-    }
-
-    print(training_in)
-
-    yaml_out = yaml.dump(training_in)
-    with open(yaml_path, "w") as f:
-        f.write(yaml_out)
+    # download the desired dataset
+    try:
+        ingestion_process = subprocess.run([
+            "python3", "download_ingested_dataset.py", 
+            "--manifest-bucket", opt.manifest_bucket, 
+            "--manifest-key", opt.manifest_key, 
+            "--image-bucket", opt.image_bucket,
+            "--holdout-size", opt.holdout_size,
+        ], check=True)
+    except subprocess.CalledProcessError as exc:
+        print(ingestion_process.stdout)
+        print(ingestion_process.stderr)
+        raise exc
 
     # Shim in the yaml.data that we just generated on the fly from our Label Manifest from S3
     opt.data = yaml_path
