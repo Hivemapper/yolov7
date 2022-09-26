@@ -81,11 +81,6 @@ def parse_opt():
 
 
 def main(opt):
-    bucket = opt.bucket
-    image_bucket = opt.image_bucket
-    key = opt.key
-    name = opt.name
-
     # download the desired dataset
     try:
         ingestion_process = subprocess.run([
@@ -100,19 +95,23 @@ def main(opt):
         print(ingestion_process.stderr)
         raise exc
 
-    # Shim in the yaml.data that we just generated on the fly from our Label Manifest from S3
-    opt.data = yaml_path
-
-    device = select_device(opt.device, batch_size=opt.batch_size)
-    with open(opt.hyp, "r") as f:
-        hyp = yaml.load(f, Loader=yaml.SafeLoader) 
-
-    # Delete duplicate argparse options
-    # `Bucket` is used by both train.py (for some Google Cloud Storage we aren't accessing) 
-    # and driver.py (for some S3 storage we are), so lets delete it before passing our args to train()
-    del opt.bucket
-    train(hyp=hyp, opt=opt, device=device, tb_writer=None)
-
+    try:
+        train_process = subprocess.run([
+            "python3", "train.py",
+            "--name", opt.name,
+            "--weights", opt.weights,
+            "--cfg", opt.cfg,
+            "--hyp", opt.hyp,
+            "--epochs", opt.epochs,
+            "--device", opt.device,
+            "--workers", opt.workers,
+            "--batch-size", opt.batch_size,
+            "--img-size", opt.img_size,
+        ], check=True)
+    except subprocess.CalledProcessError as exc:
+        print(train_process.stdout)
+        print(train_process.stderr)
+        raise exc
 
 if __name__ == "__main__":
     opt = parse_opt()
