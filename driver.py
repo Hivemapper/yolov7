@@ -10,8 +10,6 @@ import subprocess
 
 import boto3
 
-from train import train, select_device
-
 s3 = boto3.client("s3")
 
 def parse_opt():
@@ -42,7 +40,7 @@ def parse_opt():
     )
 
     # Training Args
-    parser.add_argument('--weights', type=str, default='yolo7.pt', help='initial weights path')
+    parser.add_argument('--weights', type=str, default="''", help='initial weights path')
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/coco.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.p5.yaml', help='hyperparameters path')
@@ -77,41 +75,39 @@ def parse_opt():
     parser.add_argument('--save_period', type=int, default=-1, help='Log model after every "save_period" epoch')
     parser.add_argument('--artifact_alias', type=str, default="latest", help='version of dataset artifact to be used')
     parser.add_argument('--freeze', nargs='+', type=int, default=[0], help='Freeze layers: backbone of yolov7=50, first3=0 1 2')
+
+    return parser.parse_args()
     
 
 
 def main(opt):
     # download the desired dataset
-    try:
-        ingestion_process = subprocess.run([
-            "python3", "download_ingested_dataset.py", 
-            "--manifest-bucket", opt.manifest_bucket, 
-            "--manifest-key", opt.manifest_key, 
-            "--image-bucket", opt.image_bucket,
-            "--holdout-size", opt.holdout_size,
-        ], check=True)
-    except subprocess.CalledProcessError as exc:
-        print(ingestion_process.stdout)
-        print(ingestion_process.stderr)
-        raise exc
+    ingestion_process = subprocess.run([
+        "python3", "download_ingested_dataset.py", 
+        "--manifest-bucket", str(opt.manifest_bucket), 
+        "--manifest-key", str(opt.manifest_key), 
+        "--image-bucket", str(opt.image_bucket),
+        "--holdout-size", str(opt.holdout_size),
+    ], check=True)
 
-    try:
-        train_process = subprocess.run([
-            "python3", "train.py",
-            "--name", opt.name,
-            "--weights", opt.weights,
-            "--cfg", opt.cfg,
-            "--hyp", opt.hyp,
-            "--epochs", opt.epochs,
-            "--device", opt.device,
-            "--workers", opt.workers,
-            "--batch-size", opt.batch_size,
-            "--img-size", opt.img_size,
-        ], check=True)
-    except subprocess.CalledProcessError as exc:
-        print(train_process.stdout)
-        print(train_process.stderr)
-        raise exc
+    train_command = [
+        "python3", "train.py",
+        "--name", str(opt.name),
+        "--weights", str(opt.weights),
+        "--cfg", str(opt.cfg),
+        "--hyp", str(opt.hyp),
+        "--epochs", str(opt.epochs),
+        "--device", str(opt.device),
+        "--workers", str(opt.workers),
+        "--batch-size", str(opt.batch_size),
+        "--data", "data/ingested-dataset.yaml",
+    ]
+    for dimension_size in opt.img_size:
+        train_command.extend(["--img-size", str(dimension_size)])
+    print(opt.weights)
+    if opt.weights is None:
+        print("weights are none, shim in '' ")
+    train_process = subprocess.run(train_command, check=True)
 
 if __name__ == "__main__":
     opt = parse_opt()
