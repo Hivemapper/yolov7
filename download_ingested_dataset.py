@@ -201,9 +201,9 @@ def write_dataset_yaml(
         for item_label in item["labels"]:
             class_labels_by_index[item_label["class"]] = item_label["className"]
     max_class_label_idx = max(class_labels_by_index.keys())
-    class_labels = ["__UNREPRESENTED_CLASS__" for _ in range(max_class_label_idx)]
+    class_labels = ["__UNREPRESENTED_CLASS__" for _ in range(max_class_label_idx + 1)]
     for index, name in class_labels_by_index.items():
-        class_labels[index - 1] = name
+        class_labels[index] = name
     output_yaml_data["names"] = class_labels
     output_yaml_data["nc"] = len(class_labels)
     output_yaml_data["train"] = str(dataset_path / "train")
