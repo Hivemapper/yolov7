@@ -20,22 +20,39 @@ INGESTED_DATASET_PATH = pathlib.Path("./ingested-dataset")
 
 def parse_opt():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest-bucket", help="input manifest/ label bucket name", default="network-machine-learning-data")
-    parser.add_argument("--manifest-key", help="S3 key for input manifest")
-    parser.add_argument("--image-bucket", help="input image bucket (if not same as --bucket)", default="network-sandbox-processed-data")
     parser.add_argument(
-        "--holdout-size", 
-        type=float, 
-        default=0.15, 
+        "--manifest-bucket",
+        type=str,
+        help="input manifest/ label bucket name",
+        default="network-machine-learning-data",
+    )
+    parser.add_argument(
+        "--manifest-key", 
+        type=str, 
+        help="S3 object key for input manifest"
+    )
+    parser.add_argument(
+        "--image-bucket",
+        type=str,
+        help="input image bucket (if not same as --bucket)",
+        default="network-sandbox-processed-data",
+    )
+    parser.add_argument(
+        "--holdout-size",
+        type=float,
+        default=0.15,
         help="proportion of the input dataset to withold from training, for testing and validation (0.0 < n < 0.5)",
     )
     return parser.parse_args()
+
 
 def main(opt):
     manifest_content = get_manifest_content(opt.manifest_bucket, opt.manifest_key)
     manifest_items = load_jsonl(manifest_content)
 
-    train_set, val_set, test_set = split_dataset(manifest_items)
+    train_set, val_set, test_set = split_dataset(
+        manifest_items, test_val_proportion=opt.holdout_size
+    )
     train_path, val_path, test_path = prep_dataset_directory(INGESTED_DATASET_PATH)
 
     unpack_labels(train_set, train_path)
@@ -47,7 +64,11 @@ def main(opt):
     unpack_labels(val_set, val_path)
     download_images(val_set, val_path, image_bucket_name=opt.image_bucket)
 
-    write_dataset_yaml(manifest_items, dataset_path=INGESTED_DATASET_PATH, write_path=pathlib.Path("data") / "dataset.yaml")
+    write_dataset_yaml(
+        manifest_items,
+        dataset_path=INGESTED_DATASET_PATH,
+        write_path=pathlib.Path("data") / "ingested-dataset.yaml",
+    )
 
 
 def load_jsonl(content: str):
@@ -146,7 +167,9 @@ def format_label_file(
         return
 
 
-def download_images(manifest_items: List[Dict], data_subset_path: pathlib.Path, image_bucket_name: str):
+def download_images(
+    manifest_items: List[Dict], data_subset_path: pathlib.Path, image_bucket_name: str
+):
     images_dir = data_subset_path / "images"
     items_to_download = queue.Queue()
 
@@ -169,7 +192,9 @@ def download_images(manifest_items: List[Dict], data_subset_path: pathlib.Path, 
     items_to_download.join()
 
 
-def write_dataset_yaml(manifest_items: List[Dict], dataset_path: pathlib.Path, write_path: pathlib.Path):
+def write_dataset_yaml(
+    manifest_items: List[Dict], dataset_path: pathlib.Path, write_path: pathlib.Path
+):
     output_yaml_data = {}
     class_labels_by_index = {}
     for item in manifest_items:
