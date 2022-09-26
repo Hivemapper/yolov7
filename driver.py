@@ -104,9 +104,6 @@ def main(opt):
     ]
     for dimension_size in opt.img_size:
         train_command.extend(["--img-size", str(dimension_size)])
-    print(opt.weights)
-    if opt.weights is None:
-        print("weights are none, shim in '' ")
     train_process = subprocess.run(train_command, check=True)
 
 if __name__ == "__main__":
