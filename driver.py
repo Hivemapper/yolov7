@@ -102,8 +102,28 @@ def main(opt):
         "--batch-size", str(opt.batch_size),
         "--data", "data/ingested-dataset.yaml",
     ]
-    for dimension_size in opt.img_size:
-        train_command.extend(["--img-size", str(dimension_size)])
+    if opt.img_size:
+        train_command.append("--img-size")
+        for dimension_size in opt.img_size:
+            train_command.append(str(dimension_size))
+    if opt.evolve:
+        train_command.append("--evolve")
+    if opt.cache_images:
+        train_command.append("--cache-images")
+    if opt.multi_scale:
+        train_command.append("--multi-scale")
+    if opt.single_cls:
+        train_command.append("--single-cls")
+    if opt.adam:
+        train_command.append("--adam")
+    if opt.quad:
+        train_command.append("--quad")
+    if opt.linear_lr:
+        train_command.append("--linear-lr")
+    if opt.label_smoothing:
+        train_command.extend(["--linear-lr", str(opt.label_smoothing)])
+    if opt.save_period:
+        train_command.extend(["--save-period", str(opt.save_period)])
     train_process = subprocess.run(train_command, check=True)
 
 if __name__ == "__main__":
