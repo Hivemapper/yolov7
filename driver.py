@@ -123,7 +123,7 @@ def main(opt):
     if opt.label_smoothing:
         train_command.extend(["--linear-lr", str(opt.label_smoothing)])
     if opt.save_period:
-        train_command.extend(["--save-period", str(opt.save_period)])
+        train_command.extend(["--save_period", str(opt.save_period)])
     train_process = subprocess.run(train_command, check=True)
 
 if __name__ == "__main__":
