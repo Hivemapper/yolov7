@@ -15,4 +15,3 @@ COPY . /app/
 ENV GIT_PYTHON_REFRESH=silence
 
 ENTRYPOINT [ "bash" ]
-

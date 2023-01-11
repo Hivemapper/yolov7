@@ -94,6 +94,7 @@ def train(hyp, opt, device, tb_writer=None):
     init_seeds(2 + rank)
     with open(opt.data) as f:
         data_dict = yaml.load(f, Loader=yaml.SafeLoader)  # data dict
+    mlflow.log_artifact(opt.data)  # log dataset  metadata yaml
     is_coco = str(opt.data).endswith('coco.yaml')
 
     # Logging- Doing this before checking the dataset. Might update data_dict
